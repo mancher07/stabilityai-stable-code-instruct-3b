@@ -38,8 +38,8 @@ def predict(message, history, system_prompt, temperature, max_tokens):
         streamer=streamer,
         do_sample=True,
         top_p=0.95,
-        temperature=temperature,
-        max_new_tokens=max_tokens,
+        temperature=0.5,
+        max_new_tokens=DEFAULT_MAX_NEW_TOKENS,
     )
     t = Thread(target=model.generate, kwargs=generate_kwargs)
     t.start()
@@ -57,15 +57,15 @@ if __name__ == "__main__":
     model = AutoModelForCausalLM.from_pretrained("stabilityai/stable-code-instruct-3b", torch_dtype=torch.bfloat16)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
-    
-    port = int(os.getenv('PORT', 7860))  # Usa el puerto proporcionado por Render, por defecto 7860
-    
+
+    port = int(os.environ.get("PORT", 7860))  # Obtén el puerto de la variable de entorno
+
     gr.ChatInterface(
-        fn=predict,
+        predict,
         title="Stable Code Instruct Chat - Demo",
         description="Chat Model Stable Code 3B",
         theme="soft",
-        chatbot=gr.Chatbot(label="Chat History",),
+        chatbot=gr.Chatbot(label="Chat History"),
         textbox=gr.Textbox(placeholder="input", container=False, scale=7),
         retry_btn=None,
         undo_btn="Delete Previous",
@@ -76,4 +76,4 @@ if __name__ == "__main__":
             gr.Slider(100, 2048, 1024, label="Max Tokens"),
         ],
         additional_inputs_accordion_name="Parameters",
-    ).queue().launch(server_name="0.0.0.0", server_port=port)
+    ).queue().launch(server_name="0.0.0.0", server_port=port)  # Escucha en 0.0.0.0 y el puerto especificado

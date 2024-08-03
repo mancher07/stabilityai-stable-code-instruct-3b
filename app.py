@@ -1,10 +1,6 @@
 import argparse
 import os
-import spaces
-
-
 import gradio as gr
-
 import json
 from threading import Thread
 import torch
@@ -13,22 +9,20 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStream
 MAX_LENGTH = 4096
 DEFAULT_MAX_NEW_TOKENS = 1024
 
-
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base_model", type=str)  # model path
     parser.add_argument("--n_gpus", type=int, default=1)  # n_gpu
     return parser.parse_args()
 
-@spaces.GPU()
 def predict(message, history, system_prompt, temperature, max_tokens):
     global model, tokenizer, device
-    instruction = "<|im_start|>system\nA chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.\n<|im_end|>\n"
+    instruction = "system\nA chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.\n\n"
     for human, assistant in history:
-        instruction += '<|im_start|>user\n' + human + '\n<|im_end|>\n<|im_start|>assistant\n' + assistant
-    instruction += '\n<|im_start|>user\n' + message + '\n<|im_end|>\n<|im_start|>assistant\n'
+        instruction += 'user\n' + human + '\n\nassistant\n' + assistant
+    instruction += '\nuser\n' + message + '\n\nassistant\n'
     problem = [instruction]
-    stop_tokens = ["<|endoftext|>", "<|im_end|>"]
+    stop_tokens = ["", ""]
     streamer = TextIteratorStreamer(tokenizer, timeout=100.0, skip_prompt=True, skip_special_tokens=True)
     enc = tokenizer(problem, return_tensors="pt", padding=True, truncation=True)
     input_ids = enc.input_ids
@@ -44,8 +38,8 @@ def predict(message, history, system_prompt, temperature, max_tokens):
         streamer=streamer,
         do_sample=True,
         top_p=0.95,
-        temperature=0.5,
-        max_new_tokens=DEFAULT_MAX_NEW_TOKENS,
+        temperature=temperature,
+        max_new_tokens=max_tokens,
     )
     t = Thread(target=model.generate, kwargs=generate_kwargs)
     t.start()
@@ -57,16 +51,17 @@ def predict(message, history, system_prompt, temperature, max_tokens):
         print(text)
         yield "".join(outputs)
 
-
-
 if __name__ == "__main__":
     args = parse_args()
     tokenizer = AutoTokenizer.from_pretrained("stabilityai/stable-code-instruct-3b")
     model = AutoModelForCausalLM.from_pretrained("stabilityai/stable-code-instruct-3b", torch_dtype=torch.bfloat16)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
+    
+    port = int(os.getenv('PORT', 7860))  # Usa el puerto proporcionado por Render, por defecto 7860
+    
     gr.ChatInterface(
-        predict,
+        fn=predict,
         title="Stable Code Instruct Chat - Demo",
         description="Chat Model Stable Code 3B",
         theme="soft",
@@ -81,4 +76,4 @@ if __name__ == "__main__":
             gr.Slider(100, 2048, 1024, label="Max Tokens"),
         ],
         additional_inputs_accordion_name="Parameters",
-    ).queue().launch()
+    ).queue().launch(server_name="0.0.0.0", server_port=port)

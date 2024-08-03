@@ -1,3 +1,4 @@
+spaces
 transformers==4.38.2
 tiktoken
 torch
